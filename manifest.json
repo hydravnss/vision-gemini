@@ -1,0 +1,14 @@
+{
+    "display_name": "Vision Gemini",
+    "loading_order": 35,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "hydravnss",
+    "version": "1.0.0",
+    "minimum_client_version": "1.12.0",
+    "auto_update": true,
+    "homePage": "https://github.com/hydravnss/vision-gemini",
+    "description": "FR: Gemini décrit les images (visage, cheveux, objets, voitures) et envoie le texte à DeepSeek. EN: Gemini captions images (face, hair, objects, cars) and sends the text to DeepSeek."
+}

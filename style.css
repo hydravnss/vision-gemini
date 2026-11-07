@@ -1,0 +1,50 @@
+/* Vision Gemini */
+
+.vg-hint {
+    opacity: 0.8;
+    font-size: 0.92em;
+    margin-bottom: 10px;
+}
+
+.vg-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 0;
+}
+
+.vg-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0;
+}
+
+.vg-col label {
+    font-weight: 600;
+}
+
+.vg-key-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.vg-key-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.vg-status {
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+
+.vg-status.ok {
+    color: #7dcea0;
+}
+
+.vg-status.missing {
+    opacity: 0.7;
+}

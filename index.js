@@ -22,7 +22,7 @@ const defaultSettings = Object.freeze({
     enabled: true,
     auto: true,
     showInChat: true,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.8-flash',
     prompt: DEFAULT_PROMPT,
     template: DEFAULT_TEMPLATE,
 });
@@ -43,6 +43,17 @@ function loadSettings() {
         store[MODULE_NAME].template = DEFAULT_TEMPLATE;
     }
     settings = store[MODULE_NAME];
+    const deprecated = new Set([
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-pro-vision',
+    ]);
+    if (!settings.model || deprecated.has(settings.model)) {
+        settings.model = 'gemini-3.8-flash';
+        save();
+    }
 }
 
 function requestHeaders() {
@@ -109,7 +120,7 @@ async function captionWithGemini(dataUrl) {
         body: JSON.stringify({
             image: dataUrl,
             prompt: settings.prompt || DEFAULT_PROMPT,
-            model: settings.model || 'gemini-2.0-flash',
+            model: settings.model || 'gemini-3.8-flash',
             api: 'google',
         }),
     });
@@ -121,6 +132,20 @@ async function captionWithGemini(dataUrl) {
             detail = '';
         }
         console.warn(LOG, 'caption http', res.status, detail);
+        let parsed = detail;
+        try {
+            const json = JSON.parse(detail);
+            parsed = json?.error?.message || json?.message || json?.error || detail;
+        } catch (err) {
+            parsed = detail;
+        }
+        const msg = String(parsed || '');
+        if (/no longer available|NOT_FOUND|is not found|not found/i.test(msg)) {
+            throw new Error('Ce modèle Gemini n’est plus disponible. L’extension va passer sur gemini-3.8-flash : recharge la page et renvoie l’image.');
+        }
+        if (/API[_ ]?key|PERMISSION|UNAUTHENTICATED|invalid.*key/i.test(msg)) {
+            throw new Error('Clé API Gemini refusée. Vérifie-la dans Extensions → Vision Gemini.');
+        }
         throw new Error('Gemini n’a pas pu décrire l’image');
     }
     const data = await res.json();
@@ -274,11 +299,11 @@ const SETTINGS_HTML = `
       <div class="vg-col">
         <label for="vg_model">Modèle</label>
         <select id="vg_model" class="text_pole">
-          <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-          <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-          <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+          <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+          <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+          <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+          <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
         </select>
       </div>
       <div class="vg-row">
@@ -324,7 +349,7 @@ function bindSettingsUi() {
         extra.textContent = settings.model;
         model.appendChild(extra);
     }
-    model.value = settings.model || 'gemini-2.0-flash';
+    model.value = settings.model || 'gemini-3.8-flash';
     prompt.value = settings.prompt || DEFAULT_PROMPT;
     template.value = settings.template || DEFAULT_TEMPLATE;
 

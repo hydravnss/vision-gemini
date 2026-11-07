@@ -31,7 +31,8 @@ const ctx = () => SillyTavern.getContext();
 const save = () => ctx().saveSettingsDebounced();
 
 let settings = null;
-let busy = false;
+const pending = new Map();
+const CAPTION_WAIT_MS = 20000;
 
 function loadSettings() {
     const store = ctx().extensionSettings;
@@ -166,13 +167,49 @@ function isImageMedia(media) {
     return true;
 }
 
+
+async function compressImageBlob(blob) {
+    try {
+        if (typeof createImageBitmap !== 'function') {
+            return blob;
+        }
+        const bitmap = await createImageBitmap(blob);
+        const max = 1280;
+        let width = bitmap.width;
+        let height = bitmap.height;
+        if (width > max || height > max) {
+            const scale = max / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const c2d = canvas.getContext('2d', { alpha: false });
+        if (!c2d) {
+            bitmap.close?.();
+            return blob;
+        }
+        c2d.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close?.();
+        const compressed = await new Promise((resolve) => {
+            canvas.toBlob((next) => resolve(next), 'image/jpeg', 0.8);
+        });
+        return compressed || blob;
+    } catch (err) {
+        console.debug(LOG, 'compression', err);
+        return blob;
+    }
+}
+
 async function describeMedia(media) {
     const result = await fetch(media.url);
     if (!result.ok) {
         throw new Error('image inaccessible');
     }
     const blob = await result.blob();
-    let dataUrl = await blobToDataUrl(blob);
+    const small = await compressImageBlob(blob);
+    let dataUrl = await blobToDataUrl(small);
     if (!dataUrl.startsWith('data:')) {
         throw new Error('format image invalide');
     }
@@ -252,15 +289,51 @@ async function captionMessage(messageId) {
     }
 }
 
-async function onMessageEvent(messageId) {
-    if (!(settings && settings.enabled && settings.auto) || busy) {
+function startCaption(messageId) {
+    if (!(settings && settings.enabled && settings.auto)) {
         return;
     }
-    busy = true;
-    try {
-        await captionMessage(Number(messageId));
-    } finally {
-        busy = false;
+    const id = Number(messageId);
+    if (!Number.isFinite(id) || pending.has(id)) {
+        return;
+    }
+    const job = (async () => {
+        await new Promise((resolve) => {
+            const yieldPaint = () => resolve();
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => setTimeout(yieldPaint, 0));
+            } else {
+                setTimeout(yieldPaint, 0);
+            }
+        });
+        await captionMessage(id);
+    })();
+    pending.set(id, job);
+    job.finally(() => {
+        if (pending.get(id) === job) {
+            pending.delete(id);
+        }
+    });
+}
+
+async function onGenerationAfterCommands(_type, _opts, dryRun) {
+    if (dryRun) {
+        return;
+    }
+    if (!(settings && settings.enabled && settings.auto)) {
+        return;
+    }
+    if (!pending.size) {
+        return;
+    }
+    const all = Promise.all([...pending.values()].map((job) => job.catch(() => {})));
+    const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), CAPTION_WAIT_MS));
+    const winner = await Promise.race([all.then(() => 'ok'), timeout]);
+    if (winner === 'timeout') {
+        window.toastr?.warning?.(
+            'Gemini met trop de temps à décrire l’image. Le message part sans description.',
+            'Vision Gemini',
+        );
     }
 }
 
@@ -404,9 +477,12 @@ jQuery(async () => {
 
     try {
         const { eventSource, event_types } = ctx();
-        eventSource.on(event_types.MESSAGE_SENT, onMessageEvent);
+        eventSource.on(event_types.MESSAGE_SENT, (id) => { startCaption(id); });
         if (event_types.MESSAGE_FILE_EMBEDDED) {
-            eventSource.on(event_types.MESSAGE_FILE_EMBEDDED, onMessageEvent);
+            eventSource.on(event_types.MESSAGE_FILE_EMBEDDED, (id) => { startCaption(id); });
+        }
+        if (event_types.GENERATION_AFTER_COMMANDS) {
+            eventSource.on(event_types.GENERATION_AFTER_COMMANDS, onGenerationAfterCommands);
         }
         eventSource.on(event_types.SETTINGS_LOADED_AFTER, () => {
             loadSettings();

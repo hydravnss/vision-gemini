@@ -28,6 +28,11 @@ https://github.com/hydravnss/vision-gemini
 
 Ou clone dans `data/<user>/extensions/vision-gemini`, puis recharge la page.
 
+
+## 1.1.0
+
+L'envoi s'affiche tout de suite : Gemini décrit l'image en parallèle, et DeepSeek attend cette description avant de répondre (jusqu'à 20 s). Les photos sont réduites à 1280 px avant l'envoi pour éviter que Safari se fige.
+
 ## Licence
 
 MIT © 2026 hydravnss
